@@ -80,10 +80,8 @@ function go(sec) {
       <h4>Artikel hinzufügen</h4>
       <input id="newNr" placeholder="Artikelnr.">
       <input id="newName" placeholder="Name">
-      <input id="newStart" type="number" placeholder="Startbestand">
-      <input id="newMin" type="number" placeholder="Mindestbestand">
-      <button onclick="doAdd()">Hinzufügen</button>
-      <div id="msgAdd" class="msg"></div>
+      <input id="newMenge" type="number" placeholder="Menge">
+      <button onclick="addArticle()">Hinzufügen</button>
     `;
     return;
   }
@@ -91,169 +89,111 @@ function go(sec) {
   if (sec === 'Entfernen') {
     f.innerHTML = `
       <h4>Artikel entfernen</h4>
-      <input id="delName" placeholder="ID oder Name">
-      <button onclick="doRemove()">Entfernen</button>
-      <div id="msgRemove" class="msg"></div>
+      <select id="delSelect"><option>Lade Artikel…</option></select>
+      <button onclick="removeArticle()">Entfernen</button>
     `;
+    api('articles').then(list => {
+      const sel = document.getElementById('delSelect');
+      sel.innerHTML = '';
+      list.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.name;
+        opt.text  = `${a.id} – ${a.name}`;
+        sel.appendChild(opt);
+      });
+    });
     return;
   }
 
   if (sec === 'AdminPanel') {
-    f.innerHTML = '<h4>Benutzer verwalten</h4><div id="userTable">Lade…</div>';
-    loadUsers();
+    f.innerHTML = `
+      <h4>Admin-Panel</h4>
+      <label>User:</label>
+      <select id="userSelect"><option>Lade User…</option></select>
+      <input id="resetPass" placeholder="Neues Passwort">
+      <button onclick="resetUserPass()">Passwort zurücksetzen</button>
+    `;
+    api('users').then(list => {
+      const sel = document.getElementById('userSelect');
+      sel.innerHTML = '';
+      list.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.username;
+        opt.text  = u.username;
+        sel.appendChild(opt);
+      });
+    });
     return;
   }
 }
 
-// Verbrauch/Einkauf buchen
+// Handlers für Aktionen
 async function doBook(type) {
-  const name  = document.getElementById('artSelect').value;
-  const delta = Number(document.getElementById('menge').value) || 0;
-  const msgEl = document.getElementById('msg'); msgEl.innerText = '';
+  const name = document.getElementById('artSelect').value;
+  const menge = +document.getElementById('menge').value;
   try {
-    const r = await api('book', 'POST', { name, delta: type==='Einkauf'? delta:-delta, type });
-    msgEl.innerText = `Neuer Bestand: ${r.newBestand}`;
+    await api(type.toLowerCase(), 'POST', { name, amount: menge });
+    document.getElementById('msg').textContent = 'Gebucht!';
     refreshBadges();
-  } catch(e){
-    alert('Fehler: '+e.message);
+  } catch (e) {
+    document.getElementById('msg').textContent = e.message;
   }
 }
 
-// Artikel hinzufügen
-async function doAdd() {
-  const artNr = document.getElementById('newNr').value;
-  const name  = document.getElementById('newName').value;
-  const start = Number(document.getElementById('newStart').value) || 0;
-  const mind  = Number(document.getElementById('newMin').value)   || 0;
-  try {
-    await api('articles','POST',{ artNr, name, startBestand:start, mindestBestand:mind });
-    document.getElementById('msgAdd').innerText = 'Artikel hinzugefügt';
-    loadArticles();
-  } catch(e){ alert(e.message); }
-}
-
-// Artikel entfernen
-async function doRemove() {
-  const key = document.getElementById('delName').value.trim();
-  try {
-    await api(`articles/${encodeURIComponent(key)}`,'DELETE',{});
-    document.getElementById('msgRemove').innerText = 'Artikel entfernt';
-    loadArticles();
-  } catch(e){ alert(e.message); }
-}
-
-// Artikelübersicht
 async function loadArticles() {
-  const div = document.getElementById('artikelTable');
-  div.innerText = 'Lade…';
-  try {
-    const data = await api('articles');
-    let html = '<table><tr><th>ID</th><th>Nr</th><th>Name</th><th>Bestand</th><th>Mindestbestand</th></tr>';
-    data.forEach(r => {
-      html += `<tr><td>${r.id}</td><td>${r.artNr}</td><td>${r.name}</td><td>${r.bestand}</td><td>${r.mindestBestand}</td></tr>`;
-    });
-    html += '</table>';
-    div.innerHTML = html;
-  } catch { div.innerText = 'Fehler'; }
+  const list = await api('articles');
+  const table = document.getElementById('artikelTable');
+  table.innerHTML = '<ul>' + list.map(a =>
+    `<li>${a.id} – ${a.name}: ${a.quantity}</li>`).join('') + '</ul>';
 }
 
-// Warnliste anzeigen
 async function loadWarnList() {
-  const div = document.getElementById('warnTable');
-  div.innerText = 'Lade…';
-  try {
-    const warn = await api('warnlist');
-    if (!warn.length){ div.innerText = 'Keine kritischen Artikel.'; return; }
-    let html = '<table><tr><th>ID</th><th>Nr</th><th>Name</th><th>Bestand</th><th>Mindestbestand</th></tr>';
-    warn.forEach(r => {
-      html += `<tr class="warn"><td>${r.id}</td><td>${r.artNr}</td><td>${r.name}</td><td>${r.bestand}</td><td>${r.mindestBestand}</td></tr>`;
+  const list = await api('warnlist');
+  const table = document.getElementById('warnTable');
+  table.innerHTML = '<ul>' + list.map(a =>
+    `<li>${a.id} – ${a.name}: nur noch ${a.quantity}</li>`).join('') + '</ul>';
+}
+
+async function addArticle() {
+  const id = document.getElementById('newNr').value;
+  const name = document.getElementById('newName').value;
+  const qty = +document.getElementById('newMenge').value;
+  await api('add', 'POST', { id, name, quantity: qty });
+  go('Artikelübersicht');
+}
+
+async function removeArticle() {
+  const name = document.getElementById('delSelect').value;
+  await api('remove', 'DELETE', { name });
+  go('Artikelübersicht');
+}
+
+async function resetUserPass() {
+  const name = document.getElementById('userSelect').value;
+  const pwd  = document.getElementById('resetPass').value;
+  await api('admin/reset-password', 'POST', { username: name, newPassword: pwd });
+  alert('Passwort zurückgesetzt');
+}
+
+// Handler für Change-Password-Formular
+if (document.getElementById('changeForm')) {
+  document.getElementById('changeForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const newPassword = document.getElementById('newPassword').value;
+    fetch('/api/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newPassword })
+    })
+    .then(res => res.json())
+    .then(resp => {
+      const msg = document.getElementById('msg');
+      if (resp.success) {
+        msg.textContent = 'Passwort erfolgreich geändert.';
+        setTimeout(() => window.location.href = '/', 2000);
+      } else {
+        msg.textContent = resp.error || 'Fehler';
+      }
     });
-    html += '</table>';
-    div.innerHTML = html;
-  } catch { div.innerText = 'Fehler'; }
-}
-
-// Badges aktualisieren
-async function refreshBadges(){
-  const bv = document.getElementById('badgeVerbrauch'),
-        be = document.getElementById('badgeEinkauf');
-  if (!bv||!be) return;
-  try {
-    const b = await api('badges');
-    bv.innerText = b.verbrauch;
-    be.innerText = b.einkauf;
-  } catch {}
-}
-
-// === Benutzerverwaltung ===
-async function loadUsers() {
-  const div = document.getElementById('userTable');
-  div.innerText = 'Lade…';
-  try {
-    const users = await api('users');
-    let html = '<table><tr><th>Username</th><th>Rolle</th>'
-             +'<th>V</th><th>E</th><th>+</th><th>-</th><th>A</th><th>W</th><th>U</th><th>Save</th><th>Del</th></tr>';
-    users.forEach(u => {
-      html += `<tr>
-        <td><input value="${u.username}" /></td>
-        <td><select>
-            <option${u.role==='Admin'?' selected':''}>Admin</option>
-            <option${u.role==='Manager'?' selected':''}>Manager</option>
-            <option${u.role==='Mitarbeiter'?' selected':''}>Mitarbeiter</option>
-            <option${u.role==='Leser'?' selected':''}>Leser</option>
-          </select></td>
-        ${['consume','purchase','addArticle','removeArticle','viewArticles','viewWarnlist','manageUsers']
-          .map(p=>`<td><input type="checkbox"${u.permissions[p]?' checked':''}></td>`).join('')}
-        <td><button onclick="saveUser(this)">💾</button></td>
-        <td><button onclick="deleteUser('${u.username}')">🗑️</button></td>
-      </tr>`;
-    });
-    html += '</table>';
-    div.innerHTML = html;
-  } catch(e){ div.innerText = e.message; }
-}
-
-async function saveUser(btn) {
-  const tr = btn.closest('tr');
-  const username = tr.children[0].firstElementChild.value;
-  const role = tr.children[1].firstElementChild.value;
-  const perms = {};
-  ['consume','purchase','addArticle','removeArticle','viewArticles','viewWarnlist','manageUsers']
-    .forEach((p,i)=> perms[p] = tr.children[2+i].firstElementChild.checked);
-  try {
-    await api(`users/${encodeURIComponent(username)}`,'PUT',{ role, permissions: perms });
-    alert('Gespeichert');
-    loadUsers();
-  } catch(e){ alert(e.message); }
-}
-
-async function deleteUser(username) {
-  if(!confirm(`Löschen ${username}?`)) return;
-  try {
-    await api(`users/${encodeURIComponent(username)}`,'DELETE');
-    loadUsers();
-  } catch(e){ alert(e.message); }
-}
-
-async function createUser() {
-  const u = document.getElementById('newUsername').value;
-  const p = document.getElementById('newPassword').value;
-  const role= document.getElementById('newRole').value;
-  const perms = {};
-  ['consume','purchase','addArticle','removeArticle','viewArticles','viewWarnlist','manageUsers']
-    .forEach(pn=> perms[pn] = document.getElementById('chk_'+pn).checked);
-  try {
-    await api('users','POST',{ username:u,password:p,role,permissions:perms });
-    alert('Angelegt');
-    loadUsers();
-  } catch(e){ alert(e.message); }
-}
-
-async function resetPassword(username) {
-  if(!confirm(`Passwort für ${username} zurücksetzen?`)) return;
-  try {
-    await api(`users/${encodeURIComponent(username)}/reset-password`,'POST');
-    alert('Passwort zurückgesetzt auf "Passwort"');
-    loadUsers();
-  } catch(e){ alert(e.message); }
+  });
 }
