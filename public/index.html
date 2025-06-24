@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>Pistazio Lagerverwaltung</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>Pistazio Lagerverwaltung</header>
+
+  <div id="loginDiv" class="container">
+    <input id="user" placeholder="Benutzername">
+    <input id="pass" type="password" placeholder="Passwort">
+    <button onclick="login()">Login</button>
+  </div>
+
+  <div id="mainDiv" class="container" style="display:none">
+    <p><strong>Angemeldet als:</strong> <span id="rolleDisplay"></span></p>
+    <button onclick="logout()">Abmelden</button>
+
+    <div class="grid">
+      <div class="card" onclick="go('Verbrauch')">
+        <div class="badge" id="badgeVerbrauch">0</div>Verbrauch
+      </div>
+      <div class="card" onclick="go('Einkauf')">
+        <div class="badge" id="badgeEinkauf">0</div>Einkauf
+      </div>
+      <div class="card" onclick="go('Artikelübersicht')">Artikelübersicht</div>
+      <div class="card" onclick="go('Warnliste')">Warnliste</div>
+      <div class="card" onclick="go('Hinzufügen')">Artikel hinzufügen</div>
+      <div class="card" onclick="go('Entfernen')">Artikel entfernen</div>
+      <div class="card" onclick="go('AdminPanel')">Admin-Panel</div>
+    </div>
+
+    <div id="actionForm" style="margin-top:20px"></div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

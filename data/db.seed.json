@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "username": "Gaby",
+      "password": "123",
+      "role": "Admin",
+      "mustChangePassword": false,
+      "permissions": {
+        "consume": true,
+        "purchase": true,
+        "addArticle": true,
+        "removeArticle": true,
+        "viewArticles": true,
+        "viewWarnlist": true,
+        "manageUsers": true
+      }
+    }
+  ],
+  "articles": [],
+  "bookings": []
+}

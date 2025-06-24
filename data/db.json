@@ -1,0 +1,66 @@
+{
+  "users": [
+    {
+      "username": "Gaby",
+      "password": "123",
+      "role": "Admin",
+      "mustChangePassword": false,
+      "permissions": {
+        "consume": true,
+        "purchase": true,
+        "addArticle": true,
+        "removeArticle": true,
+        "viewArticles": true,
+        "viewWarnlist": true,
+        "manageUsers": true
+      }
+    },
+    {
+      "username": "Markus",
+      "password": "222",
+      "role": "Manager",
+      "mustChangePassword": false,
+      "permissions": {
+        "consume": true,
+        "purchase": true,
+        "addArticle": true,
+        "removeArticle": true,
+        "viewArticles": true,
+        "viewWarnlist": true,
+        "manageUsers": false
+      }
+    },
+    {
+      "username": "Peter",
+      "password": "333",
+      "role": "Mitarbeiter",
+      "mustChangePassword": false,
+      "permissions": {
+        "consume": true,
+        "purchase": false,
+        "addArticle": false,
+        "removeArticle": false,
+        "viewArticles": true,
+        "viewWarnlist": true,
+        "manageUsers": false
+      }
+    },
+    {
+      "username": "Charlotte",
+      "password": "444",
+      "role": "Leser",
+      "mustChangePassword": false,
+      "permissions": {
+        "consume": false,
+        "purchase": false,
+        "addArticle": false,
+        "removeArticle": false,
+        "viewArticles": true,
+        "viewWarnlist": true,
+        "manageUsers": false
+      }
+    }
+  ],
+  "articles": [],
+  "bookings": []
+}
