@@ -1,132 +1,158 @@
-import express      from 'express';
-import path         from 'path';
-import bodyParser   from 'body-parser';
-import cookieParser from 'cookie-parser';
-import { Low }      from 'lowdb';
-import { JSONFile } from 'lowdb/node';
-import { fileURLToPath } from 'url';
-import fs           from 'fs';
+import express                  from 'express';
+import path                     from 'path';
+import bodyParser               from 'body-parser';
+import cookieParser             from 'cookie-parser';
+import { Low }                  from 'lowdb';
+import { JSONFile }             from 'lowdb/node';
+import { fileURLToPath }        from 'url';
+import fs                       from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 const app        = express();
 const PORT       = process.env.PORT || 3000;
 
-// Middlewares
+// --- Middleware ---
 app.use(bodyParser.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Ensure data directory and seed DB if missing
+// --- Ensure data folder & seed DB ---
 const dataDir = path.join(__dirname, 'data');
-const dbPath  = path.join(dataDir, 'db.json');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
-if (!fs.existsSync(dbPath)) {
-  fs.copyFileSync(path.join(dataDir, 'db.seed.json'), dbPath);
+const dbFile  = path.join(dataDir, 'db.json');
+const seedFile = path.join(dataDir, 'db.seed.json');
+
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir);
+}
+if (!fs.existsSync(dbFile)) {
+  fs.copyFileSync(seedFile, dbFile);
 }
 
-// LowDB setup
-const adapter     = new JSONFile(dbPath);
-const defaultData = JSON.parse(fs.readFileSync(path.join(dataDir, 'db.seed.json'), 'utf-8'));
+// --- LowDB setup ---
+const adapter     = new JSONFile(dbFile);
+const defaultData = JSON.parse(fs.readFileSync(seedFile, 'utf-8'));
 const db          = new Low(adapter, defaultData);
+
 await db.read();
 db.data = db.data || defaultData;
 await db.write();
 
-// Helpers
-const getUserCookie = req => req.cookies.user || '';
-const getPerms      = req => {
-  const u = db.data.users.find(u => u.username === getUserCookie(req));
+// --- Helpers ---
+const getUserFromCookie = req => req.cookies.user || null;
+const getPermissions    = req => {
+  const u = db.data.users.find(u => u.username === getUserFromCookie(req));
   return u ? u.permissions : {};
 };
 
-// Global middleware to enforce password change
+// --- Enforce password change middleware ---
 app.use(async (req, res, next) => {
   const openPaths = ['/api/login', '/api/logout', '/api/change-password'];
   if (req.path.startsWith('/api') && !openPaths.includes(req.path)) {
     await db.read();
-    const u = db.data.users.find(u => u.username === getUserCookie(req));
-    if (u && u.mustChangePassword) {
+    const user = db.data.users.find(u => u.username === getUserFromCookie(req));
+    if (user && user.mustChangePassword) {
       return res.status(403).json({ error: 'Passwort muss geändert werden' });
     }
   }
   next();
 });
 
-// Authorization middleware factory
-const authorize = perm => (req, res, next) => {
-  if (!getPerms(req)[perm]) {
-    return res.status(403).json({ error: `Keine Berechtigung: ${perm}` });
+// --- Authorization factory ---
+const authorize = permission => (req, res, next) => {
+  const perms = getPermissions(req);
+  if (!perms[permission]) {
+    return res.status(403).json({ error: `Keine Berechtigung: ${permission}` });
   }
   next();
 };
 
-// --- Auth & Profile ---
+// --- Authentication & User Info ---
+
+// Login
 app.post('/api/login', async (req, res) => {
   await db.read();
   const { username, password } = req.body;
-  const u = db.data.users.find(u => u.username === username && u.password === password);
-  if (!u) return res.status(401).json({ error: 'Login fehlgeschlagen' });
+  const user = db.data.users.find(u => u.username === username && u.password === password);
+  if (!user) {
+    return res.status(401).json({ error: 'Login fehlgeschlagen' });
+  }
   res
-    .cookie('user', u.username, { httpOnly: true })
-    .cookie('role', u.role,     { httpOnly: true })
+    .cookie('user', username, { httpOnly: true })
+    .cookie('role',  user.role,  { httpOnly: true })
     .json({
-      user: u.username,
-      role: u.role,
-      permissions: u.permissions,
-      mustChangePassword: !!u.mustChangePassword
+      user: username,
+      role: user.role,
+      permissions: user.permissions,
+      mustChangePassword: !!user.mustChangePassword
     });
 });
 
 // Logout
 app.post('/api/logout', (req, res) => {
-  res.clearCookie('user').clearCookie('role').sendStatus(200);
+  res
+    .clearCookie('user')
+    .clearCookie('role')
+    .json({ success: true });
 });
 
-// Current user info
+// Fetch current user info
 app.get('/api/me', async (req, res) => {
   await db.read();
-  const u = db.data.users.find(u => u.username === getUserCookie(req));
-  if (!u) return res.status(401).json({ error: 'Nicht eingeloggt' });
+  const user = db.data.users.find(u => u.username === getUserFromCookie(req));
+  if (!user) {
+    return res.status(401).json({ error: 'Nicht eingeloggt' });
+  }
   res.json({
-    user: u.username,
-    role: u.role,
-    permissions: u.permissions,
-    mustChangePassword: !!u.mustChangePassword
+    user: user.username,
+    role: user.role,
+    permissions: user.permissions,
+    mustChangePassword: !!user.mustChangePassword
   });
 });
 
-// Change password endpoint for users
+// --- Password Management ---
+
+// Change own password
 app.post('/api/change-password', async (req, res) => {
   const { newPassword } = req.body;
+  const username = getUserFromCookie(req);
   await db.read();
-  const username = getUserCookie(req);
-  const u = db.data.users.find(u => u.username === username);
-  if (!u) return res.status(401).json({ error: 'Nicht eingeloggt' });
-  u.password = newPassword;
-  u.mustChangePassword = false;
+  const user = db.data.users.find(u => u.username === username);
+  if (!user) {
+    return res.status(401).json({ error: 'Nicht eingeloggt' });
+  }
+  user.password = newPassword;
+  user.mustChangePassword = false;
   await db.write();
   res.json({ success: true });
 });
 
-// Admin reset password endpoint
+// Admin: reset another user's password
 app.post('/api/admin/reset-password', authorize('reset-password'), async (req, res) => {
   const { username, newPassword } = req.body;
   await db.read();
-  const u = db.data.users.find(u => u.username === username);
-  if (!u) return res.status(404).json({ error: 'User nicht gefunden' });
-  u.password = newPassword;
-  u.mustChangePassword = true;
+  const user = db.data.users.find(u => u.username === username);
+  if (!user) {
+    return res.status(404).json({ error: 'User nicht gefunden' });
+  }
+  user.password = newPassword;
+  user.mustChangePassword = true;
   await db.write();
   res.json({ success: true });
 });
 
-// Catch-all to serve index.html for root/SPAs
+// --- (Optional) Weitere API-Routen hier ---
+// z.B. app.get('/api/articles', ...), app.post('/api/consume', authorize('consume'), ...), etc.
+
+// --- Fallback für SPA/Static ---
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   }
 });
 
-// Start server
-app.listen(PORT, () => console.log(`Listening on ${PORT}`));
+// --- Start Server ---
+app.listen(PORT, () => {
+  console.log(`Server läuft auf Port ${PORT}`);
+});
